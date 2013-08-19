@@ -1,0 +1,13 @@
+Manifest-Version: 1.0
+Archiver-Version: Plexus Archiver
+Created-By: Apache Maven
+Built-By: sgoeschl
+Build-Jdk: 1.6.0_20
+Specification-Title: Commons Exec
+Specification-Version: 1.1
+Specification-Vendor: The Apache Software Foundation
+Implementation-Title: Commons Exec
+Implementation-Version: 1.1
+Implementation-Vendor-Id: org.apache.commons
+Implementation-Vendor: The Apache Software Foundation
+

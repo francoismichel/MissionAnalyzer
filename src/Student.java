@@ -139,7 +139,6 @@ public class Student extends File implements Runnable
 				try
 				{
 					this.testAnalysis();
-					this.testSuccess = (this.testErrors.isEmpty() && !this.testDestroyed);
 				}
 				catch (IOException | InterruptedException e)
 				{
@@ -408,6 +407,8 @@ public class Student extends File implements Runnable
 		
 		this.printTestOutput(outStream, this.outFile);
 		this.printTestError(errStream, this.errFile);
+		
+		this.testSuccess = (handler.getExitValue() == 0 && this.testErrors.isEmpty());
 	}
 	
 	/**
