@@ -1,3 +1,4 @@
+package missionanalyzer;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
@@ -52,6 +53,9 @@ import com.hp.gagawa.java.elements.Tr;
  */
 public class Student extends File implements Runnable
 {
+	/**  */
+	private static final long serialVersionUID = 8056215688190036928L;
+
 	/** Groupe dont fait partie l'étudiant */
 	Group group;
 	
@@ -93,8 +97,8 @@ public class Student extends File implements Runnable
 	/** Processus de test détruit */
 	boolean testDestroyed = false;
 	
-	/** Temps d'exécution des tests (ns) */
-	Hashtable<String, Long> executionTime = new Hashtable<String, Long>();
+	/** Temps d'exécution des tests */
+	Hashtable<String, String> executionTime = new Hashtable<String, String>();
 	
 	/**
 	 * Constructeur
@@ -240,6 +244,8 @@ public class Student extends File implements Runnable
 					diagnostic.getMessage(null), (int) diagnostic.getLineNumber(),
 					null,
 					new File(((JavaFileObject) diagnostic.getSource()).getName()));
+			if (diagnostic.getKind().equals(Diagnostic.Kind.WARNING))
+				error.name = "(Warning) " + error.name;
 			compilationErrors.add(error);
 			if (map.containsKey(error.name))
 				map.put(error.name, map.get(error.name) + 1);
@@ -268,18 +274,14 @@ public class Student extends File implements Runnable
 			BufferedReader outReader = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(outStream.toByteArray())));
 			BufferedWriter outWriter = null;
 			while ((s = outReader.readLine()) != null)
-			{
 				if (s.startsWith("€"))
-				{
-					this.executionTime.put(s.substring(1), Long.parseLong(outReader.readLine()));
-				}
+					this.executionTime.put(s.substring(1), outReader.readLine());
 				else
 				{
 					if (outWriter == null)
 						outWriter = new BufferedWriter(new FileWriter(file));
 					outWriter.write(s + "\n");
 				}
-			}
 			
 			outReader.close();
 			if (outWriter != null)
@@ -393,7 +395,7 @@ public class Student extends File implements Runnable
 		commandLine.addArguments(new String[] {
 				"-classpath",
 				"MissionAnalyser.jar",
-				"MissionTest",
+				"missionanalyzer/MissionTest",
 				this.toURI().toString(),
 				this.group.mission.analysis.testFile.getName().replace(".java", "")
 		});
@@ -599,10 +601,10 @@ public class Student extends File implements Runnable
 			if (errors == this.testErrorsMap && this.testSuccess)
 			{
 				Td td = new Td();
-				if(this.executionTime.isEmpty())
+				if (this.executionTime.isEmpty())
 					return td.appendChild(new Text("-"));
 				for (String s : this.executionTime.keySet())
-					td.appendChild(new Text(s + " : " + this.executionTime.get(s) + " ns" + "<br>"));
+					td.appendChild(new Text(s + " : " + this.executionTime.get(s) + "<br>"));
 				return td;
 			}
 			else

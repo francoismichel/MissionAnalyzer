@@ -1,3 +1,4 @@
+package missionanalyzer;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -16,6 +17,7 @@ import com.hp.gagawa.java.elements.H3;
 import com.hp.gagawa.java.elements.Head;
 import com.hp.gagawa.java.elements.Html;
 import com.hp.gagawa.java.elements.P;
+import com.hp.gagawa.java.elements.Script;
 import com.hp.gagawa.java.elements.Table;
 import com.hp.gagawa.java.elements.Tbody;
 import com.hp.gagawa.java.elements.Td;
@@ -35,6 +37,9 @@ import com.hp.gagawa.java.elements.Tr;
  */
 public class Mission extends File
 {
+	/**  */
+	private static final long serialVersionUID = 3635694588971414809L;
+
 	/** Analyse */
 	Analysis analysis;
 	
@@ -249,7 +254,9 @@ public class Mission extends File
 	public void writeReport(File report) throws IOException
 	{
 		Html html = new Html();
-		html.appendChild(new Head().appendChild(new Title().appendChild(new Text(this.getName()))));
+		html.appendChild(new Head()
+							.appendChild(new Script("text/javascript").setSrc("sorttable.js"))
+							.appendChild(new Title().appendChild(new Text(this.getName()))));
 		
 		Body body = new Body();
 		html.appendChild(body);
@@ -262,24 +269,24 @@ public class Mission extends File
 		Thead thead = new Thead().setAlign("center")
 				.appendChild(new Tr()
 						.appendChild(new Td().appendChild(new Text("Students")))
-						.appendChild(new Td().appendChild(new Text("Successful compilation")))
-						.appendChild(new Td().appendChild(new Text("Successful test"))));
+						.appendChild(new Td().appendChild(new Text("Successful compilation (%)")))
+						.appendChild(new Td().appendChild(new Text("Successful test (%)"))));
 		Tbody tbody = new Tbody().setAlign("center")
 				.appendChild(new Tr()
 						.appendChild(new Td().appendChild(new Text(this.students)))
-						.appendChild(new Td().appendChild(new Text(this.compilations + " (" + this.compilationAverage + " %)")))
-						.appendChild(new Td().appendChild(new Text(this.tests + " (" + this.testAverage + " %)"))));
+						.appendChild(new Td().appendChild(new Text(this.compilations + " (" + this.getPercentage(this.compilationAverage) + ")")))
+						.appendChild(new Td().appendChild(new Text(this.tests + " (" + this.getPercentage(this.testAverage) + ")"))));
 		table.appendChild(thead, tbody);
 		
 		body.appendChild(new H3().appendChild(new Text("Mission errors")));
 		if (this.compilationsErrors > 0)
 		{
-			body.appendChild(this.getErrorsTable(this.compilationsErrorsMap, this.compilationsErrors, "Compilation error"));
+			body.appendChild(this.getErrorsTable(this.compilationsErrorsMap, this.compilationsErrors, this.students, "Compilation error"));
 			body.appendChild(new P());
 		}
 		if (this.testErrors > 0)
 		{
-			body.appendChild(this.getErrorsTable(this.testErrorsMap, this.testErrors, "Test error"));
+			body.appendChild(this.getErrorsTable(this.testErrorsMap, this.testErrors, this.compilations, "Test error"));
 			body.appendChild(new P());
 		}
 		
@@ -292,6 +299,14 @@ public class Mission extends File
 		body.appendChild(this.getStudentsTable());
 		
 		FileUtils.writeStringToFile(report, html.write());
+		try
+		{
+			FileUtils.copyFile(new File("sorttable.js"), new File(this.directory.getAbsolutePath() + "/sorttable.js"));
+		}
+		catch(IOException e)
+		{
+			System.err.println("Fichier sorttable.js non trouvé dans le répertoire de l'exécutable");
+		}
 	}
 	
 	/**
@@ -306,16 +321,16 @@ public class Mission extends File
 	 * @return un objet Table contenant une ligne par erreur, les nombres absolu
 	 *         et relatif de cette erreur et sa proportion relative
 	 */
-	public Table getErrorsTable(Hashtable<String, Integer[]> errors, int relative, String title)
+	public Table getErrorsTable(Hashtable<String, Integer[]> errors, int relative, int proportion, String title)
 	{
-		Table table = new Table().setBorder("1").setCellpadding("3");
+		Table table = new Table().setBorder("1").setCellpadding("3").setCSSClass("sortable");
 		
 		Thead thead = new Thead().setAlign("center")
 				.appendChild(new Tr()
 						.appendChild(new Td().appendChild(new Text(title)))
 						.appendChild(new Td().appendChild(new Text("Absolute")))
 						.appendChild(new Td().appendChild(new Text("Relative")))
-						.appendChild(new Td().appendChild(new Text("Relative proportion"))));
+						.appendChild(new Td().appendChild(new Text("Students proportion (in %)"))));
 		
 		Tbody tbody = new Tbody();
 		
@@ -323,8 +338,10 @@ public class Mission extends File
 			tbody.appendChild(new Tr()
 					.appendChild(new Td().appendChild(new Text(errorName)))
 					.appendChild(new Td().setAlign("center").appendChild(new Text(errors.get(errorName)[0])))
-					.appendChild(new Td().setAlign("center").appendChild(new Text(errors.get(errorName)[1])))
-					.appendChild(new Td().setAlign("center").appendChild(new Text((float) errors.get(errorName)[1] * 100 / relative + " %"))));
+					.appendChild(new Td().setAlign("center").appendChild(new Text(errors.get(errorName)[1]
+											+ " (" + this.getPercentage((float) errors.get(errorName)[1] * 100 / relative) + ")")))
+					.appendChild(new Td().setAlign("center").appendChild(new Text(this.getPercentage((float) errors.get(errorName)[1] * 100 / proportion)))));
+		
 		
 		return table.appendChild(thead, tbody);
 	}
@@ -348,12 +365,12 @@ public class Mission extends File
 		Tbody tbody = new Tbody().setAlign("center")
 				.appendChild(new Tr()
 						.appendChild(new Td().appendChild(new Text("Most successful")))
-						.appendChild(new Td().appendChild(new Text(this.mostCompilations.getName() + " (" + this.mostCompilations.compilationAverage + " %)")))
-						.appendChild(new Td().appendChild(new Text(this.mostTests.getName() + " (" + this.mostTests.testAverage + " %)"))))
+						.appendChild(new Td().appendChild(new Text(this.mostCompilations.getName() + " (" + this.getPercentage(this.mostCompilations.compilationAverage) + ")")))
+						.appendChild(new Td().appendChild(new Text(this.mostTests.getName() + " (" + this.getPercentage(this.mostTests.testAverage) + ")"))))
 				.appendChild(new Tr()
 						.appendChild(new Td().appendChild(new Text("Least successful")))
-						.appendChild(new Td().appendChild(new Text(this.leastCompilations.getName() + " (" + this.leastCompilations.compilationAverage + " %)")))
-						.appendChild(new Td().appendChild(new Text(this.leastTests.getName() + " (" + this.leastTests.testAverage + " %)"))));
+						.appendChild(new Td().appendChild(new Text(this.leastCompilations.getName() + " (" + this.getPercentage(this.leastCompilations.compilationAverage) + ")")))
+						.appendChild(new Td().appendChild(new Text(this.leastTests.getName() + " (" + this.getPercentage(this.leastTests.testAverage) + ")"))));
 		
 		return table.appendChild(thead, tbody);
 	}
@@ -424,5 +441,17 @@ public class Mission extends File
 						.appendChild(student.getResult()));
 		
 		return table.appendChild(thead, tbody);
+	}
+	
+	/**
+	 * Retourne un float sous forme string à deux décimale
+	 * 
+	 * @param f
+	 *            le float à retourner
+	 * @return f avec une décimale et le symbole %
+	 */
+	public String getPercentage(float f)
+	{
+		return String.format("%.2f", f);
 	}
 }

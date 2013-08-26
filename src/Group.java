@@ -1,3 +1,4 @@
+package missionanalyzer;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -31,6 +32,9 @@ import com.hp.gagawa.java.elements.Tr;
  */
 public class Group extends File
 {
+	/**  */
+	private static final long serialVersionUID = -2685997761326944065L;
+
 	/** Mission à laquelle le groupe appartient */
 	Mission mission;
 	
@@ -189,18 +193,26 @@ public class Group extends File
 		body.appendChild(new H3().appendChild(new Text("Group errors")));
 		if (this.compilationsErrors > 0)
 		{
-			body.appendChild(this.getErrorsTable(this.compilationsErrorsMap, this.compilationsErrors, "Compilation error"));
+			body.appendChild(this.getErrorsTable(this.compilationsErrorsMap, this.compilationsErrors, this.students.size(), "Compilation error"));
 			body.appendChild(new P());
 		}
 		if (this.testErrors > 0)
 		{
-			body.appendChild(this.getErrorsTable(this.testErrorsMap, this.testErrors, "Test error"));
+			body.appendChild(this.getErrorsTable(this.testErrorsMap, this.testErrors, this.compilations, "Test error"));
 			body.appendChild(new P());
 		}
 		body.appendChild(new H3().appendChild(new Text("Students")));
 		body.appendChild(this.getStudentsTable());
 		
 		FileUtils.writeStringToFile(report, html.write());
+		try
+		{
+			FileUtils.copyFile(new File("sorttable.js"), new File(this.directory.getAbsolutePath() + "/sorttable.js"));
+		}
+		catch(IOException e)
+		{
+			System.err.println("Fichier sorttable.js non trouvé dans le répertoire de l'exécutable");
+		}
 	}
 	
 	/**
@@ -215,9 +227,9 @@ public class Group extends File
 	 * @return un objet Table contenant une ligne par erreur, les nombres absolu
 	 *         et relatif de cette erreur et sa proportion relative
 	 */
-	public Table getErrorsTable(Hashtable<String, Integer[]> errors, int relative, String title)
+	public Table getErrorsTable(Hashtable<String, Integer[]> errors, int relative, int proportion, String title)
 	{
-		return this.mission.getErrorsTable(errors, relative, title);
+		return this.mission.getErrorsTable(errors, relative, proportion, title);
 	}
 	
 	/**
@@ -284,7 +296,7 @@ public class Group extends File
 	 */
 	public Td getGroupCompilations()
 	{
-		return new Td().appendChild(new Text(this.compilations + " (" + this.compilationAverage + " %)"));
+		return new Td().appendChild(new Text(this.compilations + " (" + this.mission.getPercentage(this.compilationAverage) + ")"));
 	}
 	
 	/**
@@ -295,6 +307,6 @@ public class Group extends File
 	 */
 	public Td getGroupTests()
 	{
-		return new Td().appendChild(new Text(this.tests + " (" + this.testAverage + " %)"));
+		return new Td().appendChild(new Text(this.tests + " (" + this.mission.getPercentage(this.testAverage) + ")"));
 	}
 }
