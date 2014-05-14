@@ -186,7 +186,7 @@ public class Mission4Test
 	}
 	
 	@Test
-	public void plusLongPalindrome_long() throws Throwable
+	public void plusLongPalindrome_longest() throws Throwable
 	{
 		checkMethod(String.class, "plusLongPalindrome", String.class);
 		

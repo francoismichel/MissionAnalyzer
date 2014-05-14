@@ -171,4 +171,16 @@ public class Mission3Test
 		collector.checkThat((double) method.invoke(null, 3.0, 0.0, 0.0), equalTo(0.0));
 		collector.checkThat((double) method.invoke(null, 0.0, 0.0, 0.0), equalTo(0.0));
 	}
+	
+	@Test
+	public void sublime() throws Throwable
+	{
+		checkMethod(boolean.class, "sublime", int.class);
+		
+		collector.checkThat((boolean) method.invoke(null, 12), equalTo(true));
+		
+		collector.checkThat((boolean) method.invoke(null, 1), equalTo(false));
+		collector.checkThat((boolean) method.invoke(null, 6), equalTo(false));
+		collector.checkThat((boolean) method.invoke(null, 28), equalTo(false));
+	}
 }
