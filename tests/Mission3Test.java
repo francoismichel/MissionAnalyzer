@@ -40,7 +40,7 @@ public class Mission3Test
 		method.invoke(null, parameters);
 		end = threadMXB.getCurrentThreadCpuTime();
 		
-		System.out.println("€" + name);
+		System.out.println("§" + name);
 		System.out.println(end - start);
 	}
 	
@@ -50,7 +50,7 @@ public class Mission3Test
 		if (!method.getReturnType().equals(returnType))
 			throw new NoSuchMethodException("Wrong return type");
 		method.setAccessible(true);
-	}
+	} 
 	
 	@Test
 	public void average() throws Throwable

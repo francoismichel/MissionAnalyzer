@@ -15,9 +15,9 @@ import org.junit.runner.notification.Failure;
  * Prévue pour être lancée dans un processus dédié, cette classe lance les tests
  * d'une classe de test JUnit passée en argument à la méthode principale.
  * 
- * @author Bastien Bodart (bastien.bodart@uclouvain.be)
- * @version 1.0
- * @date 13 août 2013
+ * @author Bastien Bodart (bastien.bodart@student.uclouvain.be)
+ * @version 1.2
+ * @date 13 mai 2014
  */
 public class MissionTest
 {
@@ -47,11 +47,11 @@ public class MissionTest
 	
 	/**
 	 * Lance les tests contenus dans la classe de test et imprime les résultats
-	 * sous un format défini sur la sortie d'erreur. € est utilisé comme
+	 * sous un format défini sur la sortie d'erreur. § est utilisé comme
 	 * caractère de reconnaissance pour les erreurs de test. Imprime aussi le
 	 * temps d'exécution (ns) sur la sortie standard.
 	 * 
-	 * Format d'impression d'erreur : €nomDeLErreur message ligne methode
+	 * Format d'impression d'erreur : §nomDeL'Erreur message ligne methode
 	 * 
 	 * @param urlClassLoader class loader utilisé pour charger la classe de test
 	 * @param className nom de la classe de test
@@ -76,22 +76,22 @@ public class MissionTest
 				if (failure.getException().getClass().equals(InvocationTargetException.class))
 					if (failure.getException().getCause() != null)
 					{
-						System.err.println("€" + failure.getException().getCause().getClass().getSimpleName());
+						System.err.println("§" + failure.getException().getCause().getClass().getSimpleName());
 						message = failure.getException().getCause().getMessage();
 					}
 					else
 					{
-						System.err.println("€InvocationTargetException");
+						System.err.println("§InvocationTargetException");
 						message = failure.getException().getMessage();
 					}
 				else if(failure.getException().getClass().equals(NoSuchMethodException.class))
 				{
-					System.err.println("€" + failure.getException().getClass().getSimpleName() + " : " + failure.getTestHeader().split("\\(")[0]);
+					System.err.println("§" + failure.getException().getClass().getSimpleName() + " : " + failure.getTestHeader().split("\\(")[0]);
 					message = failure.getMessage();
 				}
 				else
 				{
-					System.err.println("€" + failure.getException().getClass().getSimpleName());
+					System.err.println("§" + failure.getException().getClass().getSimpleName());
 					message = failure.getMessage();
 				}
 				

@@ -7,7 +7,11 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Hashtable;
 
 import javax.tools.Diagnostic;
@@ -24,6 +28,7 @@ import org.apache.commons.exec.ExecuteWatchdog;
 import org.apache.commons.exec.PumpStreamHandler;
 import org.apache.commons.io.FileUtils;
 
+import com.google.gson.annotations.Expose;
 import com.hp.gagawa.java.Node;
 import com.hp.gagawa.java.elements.A;
 import com.hp.gagawa.java.elements.Body;
@@ -47,17 +52,20 @@ import com.hp.gagawa.java.elements.Tr;
  * Représente un étudiant et son dossier de soumission. Le nom de dossier doit
  * avoir la forme nom-YYYY-MM-DD
  * 
- * @author Bastien Bodart (bastien.bodart@uclouvain.be)
- * @version 1.0
- * @date 14 août 2013
+ * @author Bastien Bodart (bastien.bodart@student.uclouvain.be)
+ * @version 1.2
+ * @date 13 mai 2014
  */
 public class Student extends File implements Runnable
 {
 	/**  */
 	private static final long serialVersionUID = 8056215688190036928L;
-
+	
 	/** Groupe dont fait partie l'étudiant */
 	Group group;
+	
+	/** Path du dossier de soumission */
+	@Expose String path;
 	
 	/** Nom de l'étudiant récupéré dans le nom de dossier */
 	String studentName;
@@ -65,11 +73,20 @@ public class Student extends File implements Runnable
 	/** Répertoire contenant les rapports d'analyse */
 	File directory;
 	
-	/** Rapport d'analyse */
-	File report;
+	/** Rapport d'analyse HTML */
+	File htmlReport;
 	
-	/** Rapport PMD éventuel */
-	File pmdReport;
+	/** Rapport d'analyse JSON */
+	File jsonReport;
+	
+	/** Readme de l'étudiant */
+	File readme;
+	
+	/** Rapport PMD éventuel HTML */
+	File htmlPmdReport;
+	
+	/** Rapport PMD éventuel XML */
+	File xmlPmdReport;
 	
 	/** Fichier de sortie éventuel */
 	File outFile;
@@ -77,28 +94,31 @@ public class Student extends File implements Runnable
 	/** Fichier d'erreur éventuel */
 	File errFile;
 	
+	/** Classes et des méthodes de l'étudiant */
+	Hashtable<String, Hashtable<String, Boolean>> classList = new Hashtable<String, Hashtable<String, Boolean>>();
+	
 	/** Fichiers manquants */
-	ArrayList<String> missingFiles = new ArrayList<String>();
+	@Expose ArrayList<String> missingFiles = new ArrayList<String>();
 	
 	/** Erreurs de compilation */
-	ArrayList<StudentError> compilationErrors = new ArrayList<StudentError>();
+	@Expose ArrayList<StudentError> compilationErrors = new ArrayList<StudentError>();
 	Hashtable<String, Integer> compilationErrorsMap = new Hashtable<String, Integer>();
 	
 	/** Erreurs de test */
-	ArrayList<StudentError> testErrors = new ArrayList<StudentError>();
+	@Expose ArrayList<StudentError> testErrors = new ArrayList<StudentError>();
 	Hashtable<String, Integer> testErrorsMap = new Hashtable<String, Integer>();
 	
 	/** Compilation réussie */
-	boolean compilationSuccess = false;
+	@Expose boolean compilationSuccess = false;
 	
 	/** Test réussi */
-	boolean testSuccess = false;
+	@Expose boolean testSuccess = false;
 	
 	/** Processus de test détruit */
-	boolean testDestroyed = false;
+	@Expose boolean testDestroyed = false;
 	
 	/** Temps d'exécution des tests */
-	Hashtable<String, String> executionTime = new Hashtable<String, String>();
+	@Expose Hashtable<String, String> executionTime = new Hashtable<String, String>();
 	
 	/**
 	 * Constructeur
@@ -111,12 +131,14 @@ public class Student extends File implements Runnable
 	public Student(Group group, String name)
 	{
 		super(group.getAbsolutePath() + "/" + name);
+		this.path = this.getAbsolutePath(); 
 		this.group = group;
 		this.setStudentName(name);
 		this.directory = new File(this.group.directory.getAbsolutePath() + "/" + this.getName());
-		this.directory.mkdir();
-		this.report = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".html");
-		this.pmdReport = new File(this.directory.getAbsolutePath() + "/PMD-" + this.getName() + ".html");
+		this.jsonReport = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".json");
+		this.xmlPmdReport = new File(this.directory.getAbsolutePath() + "/PMD-" + this.getName() + ".xml");		
+		this.htmlReport = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".html");
+		this.htmlPmdReport = new File(this.directory.getAbsolutePath() + "/PMD-" + this.getName() + ".html");		
 		this.outFile = new File(this.directory.getAbsolutePath() + "/TestOutput-" + this.getName() + ".txt");
 		this.errFile = new File(this.directory.getAbsolutePath() + "/TestError-" + this.getName() + ".txt");
 	}
@@ -129,20 +151,35 @@ public class Student extends File implements Runnable
 	{
 		if (this.requiredFilesExist())
 		{
-			if (this.group.mission.analysis.pmd)
-				synchronized (this.group.mission)
-				{
-					// Ne devrait pas être synchrone mais PMD bug sans cela
-					this.codeAnalysis(this.group.mission.analysis.pmdRules);
-					this.group.mission.notifyAll();
-				}
+			if (this.group.mission.analysis.pmd)			
+				this.codeAnalysis(this.group.mission.analysis.pmdRules);			
 			
 			this.compilationAnalysis();
 			
 			if (this.compilationSuccess)
 				try
 				{
-					this.testAnalysis();
+					URLClassLoader urlClassLoader = new URLClassLoader(new URL[] { this.toURI().toURL() });
+					
+					for(String className : this.group.mission.requiredFilesNames)
+					{
+						Hashtable<String, Boolean> methodList = new Hashtable<String, Boolean>();
+						try
+						{
+							for(Method method : urlClassLoader.loadClass(className.replace(".java","")).getDeclaredMethods())
+								methodList.put(method.getName(), method.isAccessible());
+						}
+						catch (NoClassDefFoundError | ClassNotFoundException e){;}						
+						
+						this.classList.put(className, methodList);
+					}
+					
+					urlClassLoader.close();
+					
+					if(this.group.mission.analysis.testFile != null)
+						this.testAnalysis();
+					else
+						this.testSuccess = true;
 				}
 				catch (IOException | InterruptedException e)
 				{
@@ -150,12 +187,10 @@ public class Student extends File implements Runnable
 				}
 		}
 		
-		if (this.group.mission.analysis.verbose)
-			System.out.println(this.getName() + " " + this.group.getName() + " compilation success " + this.compilationSuccess + " test succes " + this.testSuccess);
-		
 		try
 		{
-			this.writeReport(this.report);
+			Mission.writeJson(this, this.jsonReport);
+			this.writeReport(this.htmlReport);
 		}
 		catch (IOException e)
 		{
@@ -167,6 +202,9 @@ public class Student extends File implements Runnable
 			this.group.mission.runningThreads--;
 			this.group.mission.notifyAll();
 		}
+		
+		if (this.group.mission.analysis.verbose)
+			System.out.println(this.getName() + " " + this.group.getName() + " compilation success " + this.compilationSuccess + " test success " + this.testSuccess);
 	}
 	
 	/**
@@ -179,8 +217,29 @@ public class Student extends File implements Runnable
 	 */
 	public void codeAnalysis(String rules)
 	{
-		String[] param = new String[] { "-dir", this.getAbsolutePath(), "-format", "summaryhtml", "-reportfile", this.pmdReport.getAbsolutePath(), "-rulesets", rules };
-		PMD.run(param);
+		boolean run = true;
+		
+		if (this.group.mission.analysis.verbose)
+			System.out.println(this.getName() + " " + this.group.getName() + " PMD analysis started");
+		
+		for(String name : this.list())
+			if(name.endsWith(".java") && Character.isLowerCase(name.charAt(0)))
+			{
+				//Nécessaire pour la bonne exécution avec cron
+				run = false;
+				break;
+			}
+		if (run)
+		{
+			PMD.run(new String[] { "-dir", this.getAbsolutePath(), "-format", "xml", "-reportfile", this.xmlPmdReport.getAbsolutePath(), "-rulesets", rules });
+			PMD.run(new String[] { "-dir", this.getAbsolutePath(), "-format", "summaryhtml", "-reportfile", this.htmlPmdReport.getAbsolutePath(), "-rulesets", rules });
+			if (this.group.mission.analysis.verbose)
+				System.out.println(this.getName() + " " + this.group.getName() + " PMD analysis completed");
+		}
+		else
+			if (this.group.mission.analysis.verbose)
+				System.out.println(this.getName() + " " + this.group.getName() + " PMD analysis aborted : wrong filenames");		
+				
 	}
 	
 	/**
@@ -189,6 +248,9 @@ public class Student extends File implements Runnable
 	 */
 	public void compilationAnalysis()
 	{
+		if (this.group.mission.analysis.verbose)
+			System.out.println(this.getName() + " " + this.group.getName() + " compilation started");
+		
 		ArrayList<String> sourceFilesPaths = new ArrayList<String>();
 		ArrayList<String> arguments = new ArrayList<String>();
 		
@@ -198,20 +260,32 @@ public class Student extends File implements Runnable
 		arguments.add("-Xlint:all");
 		arguments.add("-sourcepath");
 		arguments.add(this.getAbsolutePath());
+		arguments.add("-encoding");
+		arguments.add(this.group.mission.analysis.charset.displayName());
 		
 		if (this.compileTask(sourceFilesPaths, arguments, this.compilationErrors, this.compilationErrorsMap))
 		{
-			sourceFilesPaths = new ArrayList<String>();
-			arguments = new ArrayList<String>();
-			
-			sourceFilesPaths.add(this.group.mission.analysis.testFile.getAbsolutePath());
-			
-			arguments.add("-d");
-			arguments.add(this.getAbsolutePath());
-			arguments.add("-classpath");
-			arguments.add(this.getAbsolutePath() + ":MissionAnalyser.jar");
-			this.compilationSuccess = this.compileTask(sourceFilesPaths, arguments, this.compilationErrors, this.compilationErrorsMap);
+			if (this.group.mission.analysis.testFile != null)
+			{
+				sourceFilesPaths = new ArrayList<String>();
+				
+				arguments = new ArrayList<String>();
+				
+				sourceFilesPaths.add(this.group.mission.analysis.testFile.getAbsolutePath());
+				
+				arguments.add("-d");
+				arguments.add(this.getAbsolutePath());
+				arguments.add("-classpath");
+				arguments.add(this.getAbsolutePath() + ":" + this.group.mission.analysis.jarPath);
+				
+				this.compilationSuccess = this.compileTask(sourceFilesPaths, arguments, this.compilationErrors, this.compilationErrorsMap);
+			}
+			else
+				this.compilationSuccess = true;			
 		}
+		
+		if (this.group.mission.analysis.verbose)
+			System.out.println(this.getName() + " " + this.group.getName() + " compilation completed");
 	}
 	
 	/**
@@ -236,7 +310,7 @@ public class Student extends File implements Runnable
 				diagnosticCollector,
 				arguments,
 				null,
-				this.group.mission.javac.getStandardFileManager(null, null, null).getJavaFileObjectsFromStrings(sourceFilesPaths)).call();
+				this.group.mission.javac.getStandardFileManager(null, null, this.group.mission.analysis.charset).getJavaFileObjectsFromStrings(sourceFilesPaths)).call();
 		
 		for (Diagnostic<?> diagnostic : diagnosticCollector.getDiagnostics())
 		{
@@ -274,7 +348,7 @@ public class Student extends File implements Runnable
 			BufferedReader outReader = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(outStream.toByteArray())));
 			BufferedWriter outWriter = null;
 			while ((s = outReader.readLine()) != null)
-				if (s.startsWith("€"))
+				if (s.startsWith("§"))
 					this.executionTime.put(s.substring(1), outReader.readLine());
 				else
 				{
@@ -313,13 +387,13 @@ public class Student extends File implements Runnable
 			BufferedWriter errWriter = null;
 			
 			while ((s = errReader.readLine()) != null)
-				if (s.startsWith("€"))
+				if (s.startsWith("§"))
 				{
 					StudentError error = new StudentError(s.substring(1), errReader.readLine(),
 							Integer.parseInt(errReader.readLine()),
 							errReader.readLine(),
 							this.group.mission.analysis.testFile);
-					if (error.name.equals("AssertionError"))
+					if (error.method != null && !error.name.startsWith("NoSuchMethodException"))
 						error.name = error.name + " : " + error.method;
 					
 					this.testErrors.add(error);
@@ -383,6 +457,9 @@ public class Student extends File implements Runnable
 	 */
 	public void testAnalysis() throws ExecuteException, IOException, InterruptedException
 	{
+		if (this.group.mission.analysis.verbose)
+			System.out.println(this.getName() + " " + this.group.getName() + " testing started");
+		
 		ByteArrayOutputStream outStream = new ByteArrayOutputStream();
 		ByteArrayOutputStream errStream = new ByteArrayOutputStream();
 		
@@ -394,7 +471,7 @@ public class Student extends File implements Runnable
 		CommandLine commandLine = new CommandLine("java");
 		commandLine.addArguments(new String[] {
 				"-classpath",
-				"MissionAnalyser.jar",
+				this.group.mission.analysis.jarPath,
 				"missionanalyzer/MissionTest",
 				this.toURI().toString(),
 				this.group.mission.analysis.testFile.getName().replace(".java", "")
@@ -411,6 +488,9 @@ public class Student extends File implements Runnable
 		this.printTestError(errStream, this.errFile);
 		
 		this.testSuccess = (handler.getExitValue() == 0 && this.testErrors.isEmpty());
+		
+		if (this.group.mission.analysis.verbose)
+			System.out.println(this.getName() + " " + this.group.getName() + " testing completed");
 	}
 	
 	/**
@@ -430,9 +510,10 @@ public class Student extends File implements Runnable
 		html.appendChild(body);
 		body.appendChild(new H1().setAlign("center").appendChild(new A().setHref(this.getAbsolutePath()).appendChild(new Text(this.getName()))));
 		body.appendChild(new H3().setAlign("center")
-				.appendChild(new A().setHref(this.group.report.getAbsolutePath()).appendChild(new Text(this.group.getName())))
+				.appendChild(new A().setHref(this.group.htmlReport.getAbsolutePath()).appendChild(new Text(this.group.getName())))
 				.appendChild(new Text(" "))
-				.appendChild(new A().setHref(this.group.mission.report.getAbsolutePath()).appendChild(new Text(this.group.mission.getName()))));
+				.appendChild(new A().setHref(this.group.mission.htmlReport.getAbsolutePath()).appendChild(new Text(this.group.mission.getName()))));
+		body.appendChild(new H3().setAlign("center").appendChild(new Text(new Date().toString())));
 		body.appendChild(this.getBooleanTable());
 		if (!this.missingFiles.isEmpty())
 		{
@@ -440,21 +521,31 @@ public class Student extends File implements Runnable
 			P p = new P();
 			body.appendChild(p);
 			for (String s : this.missingFiles)
-				p.appendChild(new Text(s + ".java")).appendChild(new Br());
+				p.appendChild(new Text(s)).appendChild(new Br());
 		}
-		if (this.pmdReport.exists())
-			body.appendChild(new P().appendChild(this.getFileLink(this.pmdReport, "PMD report")));
+		if ((this.readme = new File(this.getAbsolutePath() + "/README.TXT")).exists())
+			body.appendChild(new P().appendChild(this.getFileLink(this.readme, "README.TXT")));
+		if (this.htmlPmdReport.exists())
+			body.appendChild(new P().appendChild(this.getFileLink(this.htmlPmdReport, "PMD report")));
 		if (this.outFile.exists())
 			body.appendChild(new P().appendChild(this.getFileLink(this.outFile, "Output file")));
 		if (this.errFile.exists())
 			body.appendChild(new P().appendChild(this.getFileLink(this.errFile, "Error file")));
 		
+		body.appendChild(new H3().appendChild(new Text("Classes & Methods")));
+		body.appendChild(this.getClassTable());
 		body.appendChild(new H3().appendChild(new Text("Compilation")));
 		body.appendChild(this.getErrorsTable(this.compilationErrors));
 		body.appendChild(new H3().appendChild(new Text("Test")));
 		body.appendChild(this.getErrorsTable(this.testErrors));
 		
-		FileUtils.writeStringToFile(report, html.write());
+		String s = html.write();
+		if (this.group.mission.serverMissionPath != null)
+			s = s.replaceAll(this.group.mission.getAbsolutePath(), this.group.mission.serverMissionPath);
+		if (this.group.mission.serverTestPath != null)
+			s = s.replaceAll(this.group.mission.analysis.testFile.getAbsolutePath(), this.group.mission.serverTestPath + "/" + this.group.mission.analysis.testFile.getName());
+		
+		FileUtils.writeStringToFile(report, s);
 	}
 	
 	/**
@@ -491,6 +582,31 @@ public class Student extends File implements Runnable
 			tr.appendChild(td3);
 		
 		return table.appendChild(tr);
+	}
+	
+	/**
+	 * Crée un tableau contenant les classes et méthodes
+	 * 
+	 * @return une table HTML contenant les classes, les méthodes et
+	 * 		leur accessibilité.
+	 */
+	public Node getClassTable()
+	{
+		Table table = new Table().setBorder("1").setCellpadding("3");
+		Thead thead = new Thead().setAlign("center");
+		Tr tr = new Tr().appendChild(new Td().appendChild(new Text("Class")))
+				.appendChild(new Td().appendChild(new Text("Method")))
+				.appendChild(new Td().appendChild(new Text("Is private?")));
+		thead.appendChild(tr);
+		Tbody tbody = new Tbody();
+		
+		for (String className : this.classList.keySet())
+			for (String methodName : this.classList.get(className).keySet())
+				tbody.appendChild(new Tr().appendChild(new Td().appendChild(new Text(className)))
+						.appendChild(new Td().appendChild(new Text(methodName)))
+						.appendChild(new Td().appendChild(new Text(this.classList.get(className).get(methodName).booleanValue()))));
+		
+		return table.appendChild(thead, tbody);
 	}
 	
 	/**
@@ -655,10 +771,11 @@ public class Student extends File implements Runnable
 	 */
 	private class StudentError
 	{
-		String name;
-		String message;
-		int line;
-		String method;
+		@Expose String name;
+		@Expose String message;
+		@Expose int line;
+		@Expose String method;
+		@Expose String fileName;
 		File file;
 		
 		public StudentError(String name, String message, int line, String method, File file)
@@ -667,6 +784,7 @@ public class Student extends File implements Runnable
 			this.message = message;
 			this.line = line;
 			this.method = method;
+			this.fileName = file.getName();
 			this.file = file;
 		}
 	}

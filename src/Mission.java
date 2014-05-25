@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Hashtable;
 
 import javax.tools.JavaCompiler;
@@ -11,6 +12,9 @@ import javax.tools.ToolProvider;
 
 import org.apache.commons.io.FileUtils;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.Expose;
 import com.hp.gagawa.java.elements.Body;
 import com.hp.gagawa.java.elements.H1;
 import com.hp.gagawa.java.elements.H3;
@@ -31,9 +35,9 @@ import com.hp.gagawa.java.elements.Tr;
  * 
  * Représente une mission
  * 
- * @author Bastien Bodart (bastien.bodart@uclouvain.be)
- * @version 1.0
- * @date 14 août 2013
+ * @author Bastien Bodart (bastien.bodart@student.uclouvain.be)
+ * @version 1.2
+ * @date 13 mai 2014
  */
 public class Mission extends File
 {
@@ -46,8 +50,11 @@ public class Mission extends File
 	/** Répertoire contenant les rapports d'analyse */
 	File directory;
 	
-	/** Rapport d'analyse */
-	File report;
+	/** Rapport d'analyse html */
+	File htmlReport;
+	
+	/** Rapport d'analyse json */
+	File jsonReport;
 	
 	/**
 	 * Groupes de travail de la mission définis dans le fichier de configuration
@@ -55,10 +62,15 @@ public class Mission extends File
 	ArrayList<Group> groups = new ArrayList<Group>();
 	
 	/**
+	 * Noms des groupes
+	 */
+	@Expose ArrayList<String> groupNames = new ArrayList<String>();
+	
+	/**
 	 * Fichiers à fournir par l'étudiant définis dans le fichier de
 	 * configuration
 	 */
-	ArrayList<String> requiredFilesNames = new ArrayList<String>();
+	@Expose ArrayList<String> requiredFilesNames = new ArrayList<String>();
 	
 	/** Compilateur */
 	JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
@@ -104,6 +116,12 @@ public class Mission extends File
 	
 	/** Erreurs relatives de test */
 	int testErrors = 0;
+
+	/** Path du dossier de la mission sur le serveur */
+	@Expose String serverMissionPath = null;
+	
+	/** Path du dossier contenant le fichier de test */
+	@Expose String serverTestPath = null;
 	
 	/**
 	 * Constructeur
@@ -121,7 +139,8 @@ public class Mission extends File
 		this.analysis = analysis;
 		this.directory = new File(this.getAbsolutePath() + "/analysis");
 		this.directory.mkdir();
-		this.report = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".html");
+		this.htmlReport = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".html");
+		this.jsonReport = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".json");
 		this.readMissionFile(analysis.missionFile);
 	}
 	
@@ -136,6 +155,8 @@ public class Mission extends File
 	public void analyze() throws InterruptedException, IOException
 	{
 		for (Group group : this.groups)
+		{
+			this.groupNames.add(group.getName());
 			for (Student student : group.students.values())
 				synchronized (this)
 				{
@@ -144,7 +165,10 @@ public class Mission extends File
 					// On démarre un nouveau thread pour chaque étudiant
 					this.runningThreads++;
 					new Thread(student).start();
+					if (this.analysis.verbose)
+						System.out.println(student.getName() + " " + group.getName() + " thread started");
 				}
+		}
 		// On attend que tous les threads aient terminé
 		synchronized (this)
 		{
@@ -153,7 +177,9 @@ public class Mission extends File
 		}
 		
 		this.getData();
-		this.writeReport(this.report);
+		
+		this.writeReport(this.htmlReport);
+		Mission.writeJson(this, this.jsonReport);
 	}
 	
 	/**
@@ -174,13 +200,20 @@ public class Mission extends File
 		BufferedReader reader = new BufferedReader(new FileReader(missionFile));
 		String line;
 		
+		line = reader.readLine();
+		if (!line.equals("void"))
+			this.serverMissionPath = line.trim();
+		line = reader.readLine();
+		if (!line.equals("void"))
+			this.serverTestPath = line.trim();
+		line = reader.readLine();
 		while (!(line = reader.readLine()).equals(""))
 			this.requiredFilesNames.add(line.trim());
 		
 		while ((line = reader.readLine()) != null)
 		{
 			Group group = new Group(this, line.trim());
-			if (group.exists() && group.isDirectory())
+			if (group.exists() && group.isDirectory() && !group.students.isEmpty())
 				this.groups.add(group);
 		}
 		
@@ -199,7 +232,8 @@ public class Mission extends File
 		{
 			// On récupère les données et on écrit le rapport de chaque groupe
 			group.getData();
-			group.writeReport(group.report);
+			group.writeReport(group.htmlReport);
+			Mission.writeJson(group, group.jsonReport);			
 			
 			this.students += group.students.size();
 			this.compilations += group.compilations;
@@ -244,6 +278,18 @@ public class Mission extends File
 	}
 	
 	/**
+	 * Ecrit le fichier json de l'objet pour une utilisation avec GUI
+	 * 
+	 * @param jsonFile
+	 * @throws IOException
+	 */
+	public static void writeJson(Object object, File jsonFile) throws IOException
+	{
+		Gson gson = new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create();
+		FileUtils.writeStringToFile(jsonFile, gson.toJson(object));
+	}
+	
+	/**
 	 * Ecrit le rapport d'analyse de la mission dans un fichier sous format html
 	 * 
 	 * @param report
@@ -262,6 +308,8 @@ public class Mission extends File
 		html.appendChild(body);
 		
 		body.appendChild(new H1().setAlign("center").appendChild(new Text(this.getName())));
+		body.appendChild(new H3().setAlign("center").appendChild(new Text(new Date().toString())));
+		body.appendChild(new H3().setAlign("center").appendChild(new Text("JRE version " + System.getProperties().get("java.version").toString())));
 		body.appendChild(new H3().appendChild(new Text("Students mission results")));
 		
 		Table table = new Table().setBorder("1").setCellpadding("3");
@@ -298,10 +346,13 @@ public class Mission extends File
 		body.appendChild(new H3().appendChild(new Text("Students")));
 		body.appendChild(this.getStudentsTable());
 		
-		FileUtils.writeStringToFile(report, html.write());
+		if (this.serverMissionPath != null)
+			FileUtils.writeStringToFile(report, html.write().replaceAll(this.getAbsolutePath(), this.serverMissionPath));
+		else
+			FileUtils.writeStringToFile(report, html.write());
 		try
 		{
-			FileUtils.copyFile(new File("sorttable.js"), new File(this.directory.getAbsolutePath() + "/sorttable.js"));
+			FileUtils.copyFile(new File(new File(this.analysis.jarPath).getParent() + "/sorttable.js"), new File(this.directory.getAbsolutePath() + "/sorttable.js"));
 		}
 		catch(IOException e)
 		{
@@ -431,9 +482,9 @@ public class Mission extends File
 		for (Group group : this.groups)
 			for (Student student : group.students.values())
 				tbody.appendChild(new Tr()
-						.appendChild(student.getFileLink(student.report, student.studentName))
+						.appendChild(student.getFileLink(student.htmlReport, student.studentName))
 						.appendChild(student.getMissingFiles())
-						.appendChild(student.getFileLink(student.pmdReport, "PMD report"))
+						.appendChild(student.getFileLink(student.htmlPmdReport, "PMD report"))
 						.appendChild(student.getFileLink(student.outFile, "Output file"))
 						.appendChild(student.getFileLink(student.errFile, "Error file"))
 						.appendChild(student.getErrorsText(student.compilationErrorsMap))

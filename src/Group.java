@@ -1,11 +1,14 @@
 package missionanalyzer;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Hashtable;
 
 import org.apache.commons.io.FileUtils;
 
+import com.google.gson.annotations.Expose;
 import com.hp.gagawa.java.elements.A;
 import com.hp.gagawa.java.elements.Body;
 import com.hp.gagawa.java.elements.H1;
@@ -26,9 +29,9 @@ import com.hp.gagawa.java.elements.Tr;
  * 
  * Représente un des groupes de travail de la mission
  * 
- * @author Bastien Bodart (bastien.bodart@uclouvain.be)
- * @version 1.0
- * @date 14 août 2013
+ * @author Bastien Bodart (bastien.bodart@student.uclouvain.be)
+ * @version 1.2
+ * @date 13 mai 2014
  */
 public class Group extends File
 {
@@ -42,13 +45,21 @@ public class Group extends File
 	 * Etudiants faisant partie du groupe On utilise une hashtable afin d'éviter
 	 * les doublons dus à plusieurs soummissions
 	 */
-	Hashtable<String, Student> students = new Hashtable<String, Student>();
+	@Expose Hashtable<String, Student> students = new Hashtable<String, Student>();
+	
+	/**
+	 * Noms des étudiants
+	 */
+	@Expose ArrayList<String> studentNames = new ArrayList<String>();
 	
 	/** Répertoire contenant les rapports d'analyse */
 	File directory;
 	
-	/** Rapport d'analyse */
-	File report;
+	/** Rapport d'analyse html*/
+	File htmlReport;
+	
+	/** Rapport d'analyse json*/
+	File jsonReport;
 	
 	/** Compilations réussies */
 	int compilations = 0;
@@ -85,8 +96,9 @@ public class Group extends File
 		super(mission.getAbsolutePath() + "/" + name);
 		this.mission = mission;
 		this.directory = new File(this.mission.directory.getAbsolutePath() + "/" + this.getName());
-		this.directory.mkdir();
-		this.report = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".html");
+		this.directory.mkdir();		
+		this.htmlReport = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".html");
+		this.jsonReport = new File(this.directory.getAbsolutePath() + "/" + this.getName() + ".json");
 		this.students = this.createStudents();
 	}
 	
@@ -101,16 +113,25 @@ public class Group extends File
 		Hashtable<String, Student> students = new Hashtable<String, Student>();
 		
 		String[] files = this.list();
-		Arrays.sort(files); // Nécessaire pour garder uniquement la dernière
-							// soumission
 		
-		if (files.length > 0)
+		if (files != null && files.length > 0)
+		{
+			Arrays.sort(files); // Nécessaire pour garder uniquement la dernière
+								// soumission
 			for (String file : files)
-			{
-				Student student = new Student(this, file);
-				if (student.isDirectory())
-					students.put(student.studentName, student);
-			}
+				if(!file.startsWith(".") && file.length() > 11)
+				{
+					Student student = new Student(this, file);
+					if (student.isDirectory())
+						students.put(student.studentName, student);
+				}
+		}
+		
+		for(Student student : students.values())
+		{
+			student.directory.mkdir();
+			this.studentNames.add(student.getName());
+		}
 		
 		return students;
 	}
@@ -174,8 +195,9 @@ public class Group extends File
 		html.appendChild(body);
 		body.appendChild(new H1().setAlign("center").appendChild(new Text(this.getName())));
 		body.appendChild(new H3().setAlign("center")
-				.appendChild(new A().setHref(this.mission.report.getAbsolutePath())
+				.appendChild(new A().setHref(this.mission.htmlReport.getAbsolutePath())
 						.appendChild(new Text(this.mission.getName()))));
+		body.appendChild(new H3().setAlign("center").appendChild(new Text(new Date().toString())));
 		body.appendChild(new H3().appendChild(new Text("Students group results")));
 		Table table = new Table().setBorder("1").setCellpadding("3");
 		body.appendChild(table);
@@ -204,10 +226,13 @@ public class Group extends File
 		body.appendChild(new H3().appendChild(new Text("Students")));
 		body.appendChild(this.getStudentsTable());
 		
-		FileUtils.writeStringToFile(report, html.write());
+		if (this.mission.serverMissionPath != null)
+			FileUtils.writeStringToFile(report, html.write().replaceAll(this.mission.getAbsolutePath(), this.mission.serverMissionPath));
+		else
+			FileUtils.writeStringToFile(report, html.write());
 		try
 		{
-			FileUtils.copyFile(new File("sorttable.js"), new File(this.directory.getAbsolutePath() + "/sorttable.js"));
+			FileUtils.copyFile(new File(new File(this.mission.analysis.jarPath).getParent() + "/sorttable.js"), new File(this.directory.getAbsolutePath() + "/sorttable.js"));
 		}
 		catch(IOException e)
 		{
@@ -256,9 +281,9 @@ public class Group extends File
 		
 		for (Student student : this.students.values())
 			tbody.appendChild(new Tr()
-					.appendChild(student.getFileLink(student.report, student.studentName))
+					.appendChild(student.getFileLink(student.htmlReport, student.studentName))
 					.appendChild(student.getMissingFiles())
-					.appendChild(student.getFileLink(student.pmdReport, "PMD report"))
+					.appendChild(student.getFileLink(student.htmlPmdReport, "PMD report"))
 					.appendChild(student.getFileLink(student.outFile, "Output file"))
 					.appendChild(student.getFileLink(student.errFile, "Error file"))
 					.appendChild(student.getErrorsText(student.compilationErrorsMap))
@@ -275,7 +300,7 @@ public class Group extends File
 	 */
 	public Td getGroupLink()
 	{
-		return new Td().appendChild(new A().setHref(this.report.getAbsolutePath()).appendChild(new Text(this.getName())));
+		return new Td().appendChild(new A().setHref(this.htmlReport.getAbsolutePath()).appendChild(new Text(this.getName())));
 	}
 	
 	/**

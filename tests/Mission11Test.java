@@ -59,7 +59,7 @@ public class Mission11Test
 		method.invoke(null, parameters);
 		end = threadMXB.getCurrentThreadCpuTime();
 		
-		System.out.println("€" + name);
+		System.out.println("§" + name);
 		System.out.println(end - start);
 	}
 	
